@@ -1,0 +1,8 @@
+{
+  "name": "GolfBuddies",
+  "description": "A comprehensive, mobile-first social media web application for golfers called GolfBuddies, where friends can track rounds, get AI-powered insights, and share their experiences on a social feed.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "prompt": ""
+}
