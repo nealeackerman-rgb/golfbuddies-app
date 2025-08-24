@@ -1,5 +1,3 @@
-// server/src/index.ts
-
 import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
@@ -20,19 +18,15 @@ if (!JWT_SECRET) {
 }
 
 // ========== MIDDLEWARE ==========
-// These are functions that run for every request
-app.use(cors()); // Allows your frontend (on a different URL) to talk to this backend
-app.use(express.json({ limit: '10mb' })); // Allows the server to understand JSON data sent from the frontend
+app.use(cors()); 
+app.use(express.json({ limit: '10mb' }));
 
 // ========== HELPERS ==========
 const BCRYPT_SALT_ROUNDS = 10;
 
 // ========== API ROUTES ==========
-// This is where we define the "endpoints" or URLs that the frontend will call.
 
 // --- AUTHENTICATION ---
-
-// Register a new user
 app.post('/api/register', async (req, res) => {
     try {
         const { email, password, firstName, lastName, phone, handicap } = req.body;
@@ -69,7 +63,6 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
-// Login an existing user
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -98,8 +91,6 @@ app.post('/api/login', async (req, res) => {
 
 
 // --- DATA FETCHING ---
-// These endpoints get the initial data for the app.
-
 app.get('/api/users', async (req, res) => {
     const users = await prisma.user.findMany();
     const safeUsers = users.map(({ password, ...user }) => user);
@@ -127,8 +118,6 @@ app.get('/api/rounds', async (req, res) => {
 
 
 // --- DATA MUTATION ---
-// These endpoints create and update data.
-
 app.post('/api/courses', async (req, res) => {
     const newCourse = await prisma.course.create({ data: req.body });
     res.status(201).json(newCourse);
@@ -141,7 +130,7 @@ app.post('/api/competitions', async (req, res) => {
 
 app.put('/api/competitions/:id', async (req, res) => {
     const { id } = req.params;
-    const { feed, ...dataToUpdate } = req.body; // Feed is handled by its own endpoints
+    const { feed, ...dataToUpdate } = req.body;
     const updatedCompetition = await prisma.competition.update({
         where: { id },
         data: dataToUpdate,
@@ -149,18 +138,14 @@ app.put('/api/competitions/:id', async (req, res) => {
     res.json(updatedCompetition);
 });
 
-// Add a feed item to a competition
 app.post('/api/competitions/:id/feed', async (req, res) => {
     const { id } = req.params;
     const feedItemData = req.body;
 
     const updatedCompetition = await prisma.$transaction(async (tx) => {
         const competition = await tx.competition.findUnique({ where: { id } });
-        if (!competition) {
-            throw new Error('Competition not found');
-        }
+        if (!competition) { throw new Error('Competition not found'); }
 
-        // The server is now the authority for this data
         const newFeedItem = {
             ...feedItemData,
             id: `feed-${Date.now()}`,
@@ -178,23 +163,17 @@ app.post('/api/competitions/:id/feed', async (req, res) => {
     res.status(201).json(updatedCompetition);
 });
 
-// Update a feed item (for likes)
 app.put('/api/competitions/:competitionId/feed/:itemId', async (req, res) => {
     const { competitionId, itemId } = req.params;
     const { likes } = req.body;
 
     const updatedCompetition = await prisma.$transaction(async (tx) => {
         const competition = await tx.competition.findUnique({ where: { id: competitionId }});
-        if (!competition) {
-           throw new Error('Competition not found');
-        }
+        if (!competition) { throw new Error('Competition not found'); }
+        
         const currentFeed = (competition.feed as any[]) || [];
-        const newFeed = currentFeed.map(item => {
-            if (item.id === itemId) {
-                return { ...item, likes };
-            }
-            return item;
-        });
+        const newFeed = currentFeed.map(item => item.id === itemId ? { ...item, likes } : item);
+
         return tx.competition.update({
             where: { id: competitionId },
             data: { feed: newFeed },
