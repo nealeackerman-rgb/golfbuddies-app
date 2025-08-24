@@ -1,23 +1,14 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Defines the database connection.
-// The URL is loaded from the .env file for security.
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Configures the Prisma Client generator.
-// This tells Prisma to generate the database client in JavaScript.
 generator client {
   provider = "prisma-client-js"
 }
-
-// ===============================================
-//                DATABASE MODELS
-// ===============================================
-// Each model represents a table in your database.
 
 model User {
   id                  Int      @id @default(autoincrement())
@@ -29,7 +20,6 @@ model User {
   profilePictureUrl   String
   friendIds           Int[]
   handicap            Float
-  // Optional field for multi-course competitions
   courseId            Int?
 }
 
@@ -47,49 +37,36 @@ model Competition {
   id                String       @id
   name              String
   creatorId         Int
-  // Prisma doesn't directly support array of objects well without relations.
-  // We'll store this as a JSON object.
   courses           Json
   participantIds    Int[]
   gameFormat        GameFormat
-  status            String       // "Pending", "Active", "Completed"
-  // Teams will also be stored as JSON.
+  status            String
   teams             Json?
   teamSize          Int?
-  // The competition feed will be stored as a JSON array of objects.
   feed              Json?
   skinValue         Int?
-  skinsScoringType  String?      // "gross" or "net"
+  skinsScoringType  String?
 }
-
 
 model Round {
   id               String       @id
   courseName       String
   courseId         Int
-  date             String       // Storing as ISO string
-  // Storing players as a JSON array of User-like objects
+  date             String
   players          Json
-  // Scores will be a JSON object where keys are user/team IDs
   scores           Json
   aiSummary        String?
   likes            Int
-  // Comments will be a JSON array
   comments         Json
   gameFormat       GameFormat
-  // Teams for the round stored as JSON
   teams            Json?
-  // Match results stored as a JSON object
   matchResult      Json?
   competitionId    String?
   skinValue        Int?
-  // Skins results stored as a JSON array
   skinsResult      Json?
-  skinsScoringType String?      // "gross" or "net"
+  skinsScoringType String?
 }
 
-
-// Enums define a set of allowed values for a field.
 enum GameFormat {
   STROKE_PLAY
   MATCH_PLAY
