@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import { Layout } from '../components/Layout';
@@ -260,7 +261,6 @@ export const InRound: React.FC = () => {
                     userId: currentUser.id,
                     userName: `${currentUser.firstName} ${currentUser.lastName}`,
                     userProfilePictureUrl: currentUser.profilePictureUrl,
-                    timestamp: new Date().toISOString(),
                     type: 'photo',
                     photoUrl: photoUrl,
                     hole: currentHoleIndex + 1,
@@ -311,7 +311,6 @@ export const InRound: React.FC = () => {
                     userId: currentUser.id,
                     userName: `${currentUser.firstName} ${currentUser.lastName}`,
                     userProfilePictureUrl: currentUser.profilePictureUrl,
-                    timestamp: new Date().toISOString(),
                     type: 'video',
                     videoUrl: videoUrl,
                     hole: currentHoleIndex + 1,

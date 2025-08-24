@@ -1,6 +1,9 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { User, Round, Course, Competition, CompetitionFeedItem } from '../types';
-import { MOCK_USERS, MOCK_ROUNDS, MOCK_COURSES, MOCK_COMPETITIONS } from '../constants';
+
+// Use a relative path for the API URL. Vite will proxy this to your backend in development.
+// In production, you'll replace this with your deployed backend URL.
+const API_URL = '/api';
 
 interface AppContextType {
   users: User[];
@@ -9,40 +12,77 @@ interface AppContextType {
   competitions: Competition[];
   currentUser: User | null;
   activeRoundId: string | null;
+  isDataLoaded: boolean;
   setActiveRoundId: (roundId: string | null) => void;
-  addRound: (newRound: Round) => void;
-  updateRound: (updatedRound: Round) => void;
-  updateUser: (updatedUser: User) => void;
-  addCompetition: (newCompetition: Competition) => void;
-  updateCompetition: (updatedCompetition: Competition) => void;
-  addCompetitionFeedItem: (competitionId: string, item: Omit<CompetitionFeedItem, 'id' | 'likes'>) => void;
-  updateCompetitionFeedItem: (competitionId: string, itemId: string, updates: Partial<CompetitionFeedItem>) => void;
-  login: (email: string, password_or_token: string) => boolean;
+  addRound: (newRound: Round) => Promise<void>;
+  updateRound: (updatedRound: Round) => Promise<void>;
+  updateUser: (updatedUser: User) => Promise<void>;
+  addCompetition: (newCompetition: Competition) => Promise<void>;
+  updateCompetition: (updatedCompetition: Competition) => Promise<void>;
+  addCompetitionFeedItem: (competitionId: string, item: Omit<CompetitionFeedItem, 'id' | 'likes' | 'timestamp'>) => Promise<void>;
+  updateCompetitionFeedItem: (competitionId: string, itemId: string, updates: Partial<CompetitionFeedItem>) => Promise<void>;
+  login: (email: string, password_or_token: string) => Promise<boolean>;
   logout: () => void;
-  register: (newUser: Omit<User, 'id' | 'friendIds' | 'profilePictureUrl'>) => boolean;
-  addFriend: (friendId: number) => void;
-  removeFriend: (friendId: number) => void;
-  addCourse: (newCourse: Course) => void;
+  register: (newUser: Omit<User, 'id' | 'friendIds' | 'profilePictureUrl'>) => Promise<boolean>;
+  addFriend: (friendId: number) => Promise<void>;
+  removeFriend: (friendId: number) => Promise<void>;
+  addCourse: (newCourse: Course) => Promise<Course | null>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
-  const [rounds, setRounds] = useState<Round[]>(MOCK_ROUNDS);
-  const [courses, setCourses] = useState<Course[]>(MOCK_COURSES);
-  const [competitions, setCompetitions] = useState<Competition[]>(MOCK_COMPETITIONS);
+  const [users, setUsers] = useState<User[]>([]);
+  const [rounds, setRounds] = useState<Round[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [activeRoundId, setActiveRoundId] = useState<string | null>(() => localStorage.getItem('activeRoundId'));
+  const [isDataLoaded, setIsDataLoaded] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const savedUser = localStorage.getItem('currentUser');
-    return savedUser ? JSON.parse(savedUser) : null;
+    try {
+        const savedUser = localStorage.getItem('currentUser');
+        return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+        return null;
+    }
   });
+
+  const getAuthHeaders = () => {
+      const token = localStorage.getItem('authToken');
+      return {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+      };
+  };
+
+  const fetchData = async () => {
+    try {
+        const [usersRes, coursesRes, competitionsRes, roundsRes] = await Promise.all([
+            fetch(`${API_URL}/users`),
+            fetch(`${API_URL}/courses`),
+            fetch(`${API_URL}/competitions`),
+            fetch(`${API_URL}/rounds`),
+        ]);
+        setUsers(await usersRes.json());
+        setCourses(await coursesRes.json());
+        setCompetitions(await competitionsRes.json());
+        setRounds(await roundsRes.json());
+        setIsDataLoaded(true);
+    } catch (error) {
+        console.error("Failed to fetch initial data:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('currentUser', JSON.stringify(currentUser));
     } else {
       localStorage.removeItem('currentUser');
+      localStorage.removeItem('authToken');
     }
   }, [currentUser]);
   
@@ -54,116 +94,168 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [activeRoundId]);
 
-  const login = (email: string, password?: string): boolean => {
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-    if (user) {
-      setCurrentUser(user);
-      return true;
+  const login = async (email: string, password?: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${API_URL}/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+        });
+        if (response.ok) {
+            const { user, token } = await response.json();
+            setCurrentUser(user);
+            localStorage.setItem('authToken', token);
+            await fetchData(); // Refresh data after login
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error("Login failed:", error);
+        return false;
     }
-    return false;
   };
 
   const logout = () => {
     setCurrentUser(null);
   };
   
-  const register = (newUser: Omit<User, 'id' | 'friendIds' | 'profilePictureUrl'>): boolean => {
-      const userExists = users.some(u => u.email.toLowerCase() === newUser.email.toLowerCase());
-      if(userExists) {
-          alert("User with this email already exists.");
+  const register = async (newUser: Omit<User, 'id' | 'friendIds' | 'profilePictureUrl'>): Promise<boolean> => {
+      try {
+          const response = await fetch(`${API_URL}/register`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newUser),
+          });
+          if (response.ok) {
+              const { user, token } = await response.json();
+              setCurrentUser(user);
+              localStorage.setItem('authToken', token);
+              await fetchData(); // Refresh data
+              return true;
+          }
+          return false;
+      } catch (error) {
+          console.error("Registration failed:", error);
           return false;
       }
-      
-      const createdUser: User = {
-          ...newUser,
-          id: Date.now(), // simple unique id
-          friendIds: [],
-          profilePictureUrl: `https://picsum.photos/seed/${Date.now()}/200/200` // random profile pic
-      };
-      
-      setUsers(prev => [...prev, createdUser]);
-      setCurrentUser(createdUser);
-      return true;
   };
 
-  const addRound = (newRound: Round) => {
-    setRounds(prevRounds => [newRound, ...prevRounds]);
+  const addRound = async (newRound: Round) => {
+    const response = await fetch(`${API_URL}/rounds`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(newRound),
+    });
+    const savedRound = await response.json();
+    setRounds(prevRounds => [savedRound, ...prevRounds]);
   };
   
-  const updateRound = (updatedRound: Round) => {
+  const updateRound = async (updatedRound: Round) => {
+    await fetch(`${API_URL}/rounds/${updatedRound.id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(updatedRound),
+    });
     setRounds(prevRounds => prevRounds.map(r => r.id === updatedRound.id ? updatedRound : r));
   };
 
-  const updateUser = (updatedUser: User) => {
-    const updatedUsers = users.map(u => u.id === updatedUser.id ? updatedUser : u);
-    setUsers(updatedUsers);
-    if (currentUser && currentUser.id === updatedUser.id) {
-        setCurrentUser(updatedUser);
+  const updateUser = async (updatedUser: User) => {
+    const response = await fetch(`${API_URL}/users/${updatedUser.id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(updatedUser)
+    });
+    const savedUser = await response.json();
+    setUsers(users.map(u => u.id === savedUser.id ? savedUser : u));
+    if (currentUser && currentUser.id === savedUser.id) {
+        setCurrentUser(savedUser);
     }
   };
   
-    const addCompetition = (newCompetition: Competition) => {
-        setCompetitions(prev => [newCompetition, ...prev]);
+    const addCompetition = async (newCompetition: Competition) => {
+        const response = await fetch(`${API_URL}/competitions`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(newCompetition)
+        });
+        const savedCompetition = await response.json();
+        setCompetitions(prev => [savedCompetition, ...prev]);
     };
 
-    const updateCompetition = (updatedCompetition: Competition) => {
+    const updateCompetition = async (updatedCompetition: Competition) => {
+        await fetch(`${API_URL}/competitions/${updatedCompetition.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(updatedCompetition)
+        });
         setCompetitions(prev => prev.map(t => t.id === updatedCompetition.id ? updatedCompetition : t));
     };
 
-    const addCompetitionFeedItem = (competitionId: string, item: Omit<CompetitionFeedItem, 'id' | 'likes'>) => {
-        setCompetitions(prev => prev.map(t => {
-            if (t.id === competitionId) {
-                const newItem: CompetitionFeedItem = {
-                    ...item,
-                    id: `feed-${Date.now()}`,
-                    likes: 0
-                };
-                const newFeed = [newItem, ...(t.feed || [])];
-                return { ...t, feed: newFeed };
-            }
-            return t;
-        }));
+    const addCompetitionFeedItem = async (competitionId: string, item: Omit<CompetitionFeedItem, 'id' | 'likes' | 'timestamp'>) => {
+        const newItem: CompetitionFeedItem = {
+            ...item,
+            id: `feed-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            likes: 0
+        };
+        const response = await fetch(`${API_URL}/competitions/${competitionId}/feed`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(newItem)
+        });
+        const updatedCompetition = await response.json();
+        setCompetitions(prev => prev.map(t => t.id === competitionId ? updatedCompetition : t));
     };
 
-    const updateCompetitionFeedItem = (competitionId: string, itemId: string, updates: Partial<CompetitionFeedItem>) => {
-        setCompetitions(prev => prev.map(t => {
-            if (t.id === competitionId) {
-                const newFeed = (t.feed || []).map(item => {
-                    if (item.id === itemId) {
-                        return { ...item, ...updates };
-                    }
-                    return item;
-                });
-                return { ...t, feed: newFeed };
-            }
-            return t;
-        }));
+    const updateCompetitionFeedItem = async (competitionId: string, itemId: string, updates: Partial<CompetitionFeedItem>) => {
+        const response = await fetch(`${API_URL}/competitions/${competitionId}/feed/${itemId}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(updates)
+        });
+        const updatedCompetition = await response.json();
+        setCompetitions(prev => prev.map(t => t.id === competitionId ? updatedCompetition : t));
     };
 
-  const addFriend = (friendId: number) => {
+  const addFriend = async (friendId: number) => {
       if(!currentUser) return;
-      const updatedUser: User = {
-          ...currentUser,
-          friendIds: [...(currentUser.friendIds || []), friendId]
-      };
+      const response = await fetch(`${API_URL}/users/${currentUser.id}/friends`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ friendId })
+      });
+      const updatedUser = await response.json();
       updateUser(updatedUser);
   };
   
-  const removeFriend = (friendId: number) => {
+  const removeFriend = async (friendId: number) => {
        if(!currentUser) return;
-      const updatedUser: User = {
-          ...currentUser,
-          friendIds: (currentUser.friendIds || []).filter(id => id !== friendId)
-      };
+      const response = await fetch(`${API_URL}/users/${currentUser.id}/friends/${friendId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      const updatedUser = await response.json();
       updateUser(updatedUser);
   };
   
-  const addCourse = (newCourse: Course) => {
-    setCourses(prevCourses => [...prevCourses, newCourse]);
+  const addCourse = async (newCourse: Course) => {
+    try {
+        const response = await fetch(`${API_URL}/courses`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(newCourse)
+        });
+        const savedCourse = await response.json();
+        setCourses(prevCourses => [...prevCourses, savedCourse]);
+        return savedCourse;
+    } catch (error) {
+        console.error("Failed to add course", error);
+        return null;
+    }
   };
 
   return (
-    <AppContext.Provider value={{ users, rounds, courses, competitions, currentUser, activeRoundId, setActiveRoundId, addRound, updateRound, updateUser, addCompetition, updateCompetition, addCompetitionFeedItem, updateCompetitionFeedItem, login, logout, register, addFriend, removeFriend, addCourse }}>
+    <AppContext.Provider value={{ isDataLoaded, users, rounds, courses, competitions, currentUser, activeRoundId, setActiveRoundId, addRound, updateRound, updateUser, addCompetition, updateCompetition, addCompetitionFeedItem, updateCompetitionFeedItem, login, logout, register, addFriend, removeFriend, addCourse }}>
       {children}
     </AppContext.Provider>
   );

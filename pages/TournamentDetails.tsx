@@ -20,7 +20,6 @@ const CompetitionFeedForm: React.FC<{ competitionId: string, isParticipant: bool
             userId: currentUser.id,
             userName: `${currentUser.firstName} ${currentUser.lastName}`,
             userProfilePictureUrl: currentUser.profilePictureUrl,
-            timestamp: new Date().toISOString(),
             type: 'comment',
             text: comment.trim(),
         });
