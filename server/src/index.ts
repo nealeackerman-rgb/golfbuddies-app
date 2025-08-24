@@ -152,16 +152,24 @@ app.put('/api/competitions/:id', async (req, res) => {
 // Add a feed item to a competition
 app.post('/api/competitions/:id/feed', async (req, res) => {
     const { id } = req.params;
-    const feedItem = req.body;
+    const feedItemData = req.body;
 
-    // We use a transaction to safely read and update the JSON array
     const updatedCompetition = await prisma.$transaction(async (tx) => {
-        const competition = await tx.competition.findUnique({ where: { id }});
+        const competition = await tx.competition.findUnique({ where: { id } });
         if (!competition) {
             throw new Error('Competition not found');
         }
+
+        // The server is now the authority for this data
+        const newFeedItem = {
+            ...feedItemData,
+            id: `feed-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            likes: 0
+        };
+
         const currentFeed = (competition.feed as any[]) || [];
-        const newFeed = [feedItem, ...currentFeed];
+        const newFeed = [newFeedItem, ...currentFeed];
         return tx.competition.update({
             where: { id },
             data: { feed: newFeed },
