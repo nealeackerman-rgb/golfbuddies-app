@@ -3,7 +3,7 @@ import { User, Round, Course, Competition, CompetitionFeedItem } from '../types'
 
 // Use a relative path for the API URL. Vite will proxy this to your backend in development.
 // In production, you'll replace this with your deployed backend URL.
-const API_URL = '/api';
+const API_URL = '/apihttps://golfbuddies-80437277558.us-west1.run.app';
 
 interface AppContextType {
   users: User[];
